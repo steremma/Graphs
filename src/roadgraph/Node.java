@@ -10,7 +10,7 @@ import java.util.Set;
  *
  */
 public class Node {
-	private Set<Edge> neighbors;
+	protected Set<Edge> neighbors;
 	
 	/**
 	 * Default constructor, initialize an empty list of neighbors

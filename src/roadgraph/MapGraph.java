@@ -160,7 +160,7 @@ public class MapGraph {
 			curr = q.dequeue();
 			visited.add(curr);
 			if(curr == g) {
-				return getPath(parent,g,s);
+				return getBfsPath(parent,g,s);
 			}
 
 			for(Edge e : curr.getNeighbors()) {
@@ -181,7 +181,7 @@ public class MapGraph {
 	 * @param start The starting vertex
 	 * @return
 	 */
-	private List<GeographicPoint> getPath(HashMap<Node,Node> parent,Node goal,Node start) {
+	private List<GeographicPoint> getBfsPath(HashMap<Node,Node> parent,Node goal,Node start) {
 		List<Node> path = new LinkedList<Node>();
 		path.add(goal);
 		Node next = null;
@@ -192,7 +192,7 @@ public class MapGraph {
 		}
 		// Client code expects the path from start to finish, not the opposite.
 		Collections.reverse(path);
-		return getPath(path);
+		return getBfsPath(path);
 	}
 
 	/** Transform the inner representation of the path to the form expected by client code
@@ -200,7 +200,7 @@ public class MapGraph {
 	 * @param nPath the inner representation of the path
 	 * @return path the path in terms of Geographic points
 	 */
-	private List<GeographicPoint> getPath(List<Node> nPath) {
+	private List<GeographicPoint> getBfsPath(List<Node> nPath) {
 		List<GeographicPoint> path = new ArrayList<GeographicPoint>();
 		for(Node i : nPath) {
 			path.add(reverseMapping(i));
@@ -247,35 +247,9 @@ public class MapGraph {
 	public List<GeographicPoint> dijkstra(GeographicPoint start, 
 			GeographicPoint goal, Consumer<GeographicPoint> nodeSearched)
 	{
-		PriorityQueue<SearchNode> pr = new PriorityQueue<SearchNode>();
-		Set<Node> visited = new HashSet<Node>();
-		// Hook for visualization.  See writeup.
-		//nodeSearched.accept(next.getLocation());
-		SearchNode s = new SearchNode(nodeMap.get(start),0,null);
-		SearchNode g = new SearchNode(nodeMap.get(goal));
-		SearchNode curr = s;
-		pr.add(curr);
-		// Loop
-		while(!pr.isEmpty()) {
-			curr = pr.poll();
-			if(visited.contains(curr.node)) {
-				continue;
-			}
-			visited.add(curr.node);
-			if(curr == g) {
-				//return getPath(parent,g,s);
-				return dijkstraPath(g);
-			}
-			for(Edge e : curr.node.getNeighbors()) {
-				double newDistance = curr.distance + e.getDistance();
-				// I don't need to check for the previous distance, the shorter one 
-				// is guaranteed to be dequeued first.
-				pr.add(new SearchNode(e.getDestination(),newDistance,curr));
-				//parent.put(dest, curr);
-			}
-		}
-		return null;
+		return djikstraHelper(start,goal,true);
 	}
+
 	private List<GeographicPoint> dijkstraPath(SearchNode goal) {
 		List<GeographicPoint> path = new ArrayList<GeographicPoint>();
 		path.add(reverseMapping(goal.node));
@@ -287,30 +261,7 @@ public class MapGraph {
 		Collections.reverse(path);
 		return path;
 	}
-	private class SearchNode implements Comparable<SearchNode>{
-		public double distance;
-		public Node node;
-		public SearchNode parent;
-		public SearchNode(Node node) {
-			this(node,Double.POSITIVE_INFINITY,null);
-		}
-		
-		public SearchNode(Node node,double distance,SearchNode parent) {
-			this.node = node;
-			this.distance = distance;
-			this.parent = parent;
-		}
-		@Override
-		public int compareTo(SearchNode other) {
-			// TODO Auto-generated method stub
-			if(this.distance < other.distance) {
-				return -1;
-			}
-			else return 1;
-		}
 
-
-	}
 	/** Find the path from start to goal using A-Star search
 	 * 
 	 * @param start The starting location
@@ -323,26 +274,105 @@ public class MapGraph {
 		Consumer<GeographicPoint> temp = (x) -> {};
 		return aStarSearch(start, goal, temp);
 	}
+	
+	/** A helper function aiming to remove code duplication by performing
+	 * either Djikstra's algorithm or Astar Search on the graph. 
+	 * 
+	 * @param start The starting location
+	 * @param goal The goal location
+	 * @param pureDjikstra true for djikstra's, false for AstarSearch
+	 * @return The list of intersections that form the shortest path from 
+	 *   start to goal (including both start and goal).
+	 */
+	private List<GeographicPoint> djikstraHelper(GeographicPoint start, 
+			GeographicPoint goal,boolean pureDjikstra) {
 
+		// TODO: Implement this method in WEEK 3
+		PriorityQueue<SearchNode> pr = new PriorityQueue<SearchNode>();
+		Set<Node> visited = new HashSet<Node>();
+		// Hook for visualization.  See writeup.
+		//nodeSearched.accept(next.getLocation());
+		double startDistance = pureDjikstra ? 0 : start.distance(goal);
+		SearchNode s = new SearchNode(nodeMap.get(start),startDistance,null);
+		SearchNode g = new SearchNode(nodeMap.get(goal));
+		SearchNode curr = s;
+		pr.add(curr);
+		// Loop
+		while(!pr.isEmpty()) {
+			curr = pr.poll();
+			if(visited.contains(curr.node)) {
+				continue;
+			}
+			visited.add(curr.node);
+			if(curr.node == g.node) {
+				//return getPath(parent,g,s);
+				return dijkstraPath(curr);
+			}
+			for(Edge e : curr.node.getNeighbors()) {
+				double newDistance = curr.distance + e.getDistance();
+				if(!pureDjikstra) {
+					newDistance += curr.estimateDistance(g);
+				}
+				// I don't need to check for the previous distance, the shorter one 
+				// is guaranteed to be dequeued first.
+				pr.add(new SearchNode(e.getDestination(),newDistance,curr));
+			}
+		}
+		return null;
+	}
+	
 	/** Find the path from start to goal using A-Star search
 	 * 
 	 * @param start The starting location
 	 * @param goal The goal location
 	 * @param nodeSearched A hook for visualization.  See assignment instructions for how to use it.
 	 * @return The list of intersections that form the shortest path from 
-	 *   start to goal (including both start and goal).
+	 *   start to goal (including both start and goal)
 	 */
 	public List<GeographicPoint> aStarSearch(GeographicPoint start, 
 			GeographicPoint goal, Consumer<GeographicPoint> nodeSearched)
 	{
 		// TODO: Implement this method in WEEK 3
-
+		return djikstraHelper(start,goal,false);
 		// Hook for visualization.  See writeup.
 		//nodeSearched.accept(next.getLocation());
-
-		return null;
 	}
 	
+	/** A wrapper class around my Node object.
+	 *  This class is used by Djikstra's algorithm as it also contains a cost field,
+	 *  distance as well as the parent Node leading to the current one. The class implements 
+	 *  Combarable in order to facilitate priorityQueye entries.
+	 *  
+	 * @author manos
+	 */
+	private class SearchNode implements Comparable<SearchNode>{
+		public double distance;
+		public Node node;
+		public SearchNode parent;
+		public SearchNode(Node node) {
+			this(node,Double.POSITIVE_INFINITY,null);
+		}
+
+		public SearchNode(Node node,double distance,SearchNode parent) {
+			this.node = node;
+			this.distance = distance;
+			this.parent = parent;
+		}
+		public double estimateDistance(SearchNode other) {
+			GeographicPoint start = reverseMapping(this.node);
+			GeographicPoint goal = reverseMapping(other.node);
+			return start.distance(goal);
+		}
+		@Override
+		public int compareTo(SearchNode other) {
+			// TODO Auto-generated method stub
+			if(this.distance < other.distance) {
+				return -1;
+			}
+			else return 1;
+		}
+	}
+
 	public static void main(String[] args)
 	{
 		System.out.print("Making a new map...");
