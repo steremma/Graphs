@@ -146,80 +146,8 @@ public class MapGraph {
 	public List<GeographicPoint> bfs(GeographicPoint start, 
 			GeographicPoint goal, Consumer<GeographicPoint> nodeSearched)
 	{
-		// Initialization
-		Queue<Node> q = new Queue<Node>();
-		HashMap<Node,Node> parent = new HashMap<Node,Node>();
-		Set<Node> visited = new HashSet<Node>();
-		Node s = nodeMap.get(start);
-		Node g = nodeMap.get(goal);
-		Node curr = s;
-		q.enqueue(curr);
-
-		// Loop
-		while(!q.isEmpty()) {
-			curr = q.dequeue();
-			visited.add(curr);
-			if(curr == g) {
-				return getBfsPath(parent,g,s);
-			}
-
-			for(Edge e : curr.getNeighbors()) {
-				Node dest = e.getDestination();
-				if(!visited.contains(dest)) {
-					q.enqueue(dest);
-					parent.put(dest, curr);
-				}	
-			}
-		}
-		return null;	
-	}
-
-	/** Construct the path leading from start to goal
-	 * 
-	 * @param parent a collection mapping each Vertex to the Vertex that led to it
-	 * @param goal The final vertex in the path
-	 * @param start The starting vertex
-	 * @return
-	 */
-	private List<GeographicPoint> getBfsPath(HashMap<Node,Node> parent,Node goal,Node start) {
-		List<Node> path = new LinkedList<Node>();
-		path.add(goal);
-		Node next = null;
-		// Iterate generations backwards starting from goal until we reach the starting point.
-		while(next != start) {
-			next = parent.get(path.get(path.size() - 1));
-			path.add(next);
-		}
-		// Client code expects the path from start to finish, not the opposite.
-		Collections.reverse(path);
-		return getBfsPath(path);
-	}
-
-	/** Transform the inner representation of the path to the form expected by client code
-	 * 
-	 * @param nPath the inner representation of the path
-	 * @return path the path in terms of Geographic points
-	 */
-	private List<GeographicPoint> getBfsPath(List<Node> nPath) {
-		List<GeographicPoint> path = new ArrayList<GeographicPoint>();
-		for(Node i : nPath) {
-			path.add(reverseMapping(i));
-		}
-		return path;
-
-	}
-
-	/** Find the map's key given its value.
-	 *   @param n The map value
-	 *   @return p The key mapping to i
-	 */
-	private GeographicPoint reverseMapping(Node n) {
-		for(Map.Entry<GeographicPoint, Node> entry : nodeMap.entrySet()) {
-			if(entry.getValue() == n) {
-				return entry.getKey();
-			}
-		}
-		throw new IllegalArgumentException("no point has an id of " + n);
+		ShortestPathFinder searcher = new BfsPathFinder(nodeMap);
+		return searcher.search(start, goal);
 	}
 
 	/** Find the path from start to goal using Dijkstra's algorithm
@@ -247,20 +175,10 @@ public class MapGraph {
 	public List<GeographicPoint> dijkstra(GeographicPoint start, 
 			GeographicPoint goal, Consumer<GeographicPoint> nodeSearched)
 	{
-		return djikstraHelper(start,goal,true);
+		ShortestPathFinder searcher = new AStarPathFinder(nodeMap,true);
+		return searcher.search(start, goal);
 	}
 
-	private List<GeographicPoint> dijkstraPath(SearchNode goal) {
-		List<GeographicPoint> path = new ArrayList<GeographicPoint>();
-		path.add(reverseMapping(goal.node));
-		SearchNode previous = goal;
-		while(previous.parent != null) {
-			previous = previous.parent;
-			path.add(reverseMapping(previous.node));
-		}
-		Collections.reverse(path);
-		return path;
-	}
 
 	/** Find the path from start to goal using A-Star search
 	 * 
@@ -275,51 +193,6 @@ public class MapGraph {
 		return aStarSearch(start, goal, temp);
 	}
 	
-	/** A helper function aiming to remove code duplication by performing
-	 * either Djikstra's algorithm or Astar Search on the graph. 
-	 * 
-	 * @param start The starting location
-	 * @param goal The goal location
-	 * @param pureDjikstra true for djikstra's, false for AstarSearch
-	 * @return The list of intersections that form the shortest path from 
-	 *   start to goal (including both start and goal).
-	 */
-	private List<GeographicPoint> djikstraHelper(GeographicPoint start, 
-			GeographicPoint goal,boolean pureDjikstra) {
-
-		// TODO: Implement this method in WEEK 3
-		PriorityQueue<SearchNode> pr = new PriorityQueue<SearchNode>();
-		Set<Node> visited = new HashSet<Node>();
-		// Hook for visualization.  See writeup.
-		//nodeSearched.accept(next.getLocation());
-		double startDistance = pureDjikstra ? 0 : start.distance(goal);
-		SearchNode s = new SearchNode(nodeMap.get(start),startDistance,null);
-		SearchNode g = new SearchNode(nodeMap.get(goal));
-		SearchNode curr = s;
-		pr.add(curr);
-		// Loop
-		while(!pr.isEmpty()) {
-			curr = pr.poll();
-			if(visited.contains(curr.node)) {
-				continue;
-			}
-			visited.add(curr.node);
-			if(curr.node == g.node) {
-				//return getPath(parent,g,s);
-				return dijkstraPath(curr);
-			}
-			for(Edge e : curr.node.getNeighbors()) {
-				double newDistance = curr.distance + e.getDistance();
-				if(!pureDjikstra) {
-					newDistance += curr.estimateDistance(g);
-				}
-				// I don't need to check for the previous distance, the shorter one 
-				// is guaranteed to be dequeued first.
-				pr.add(new SearchNode(e.getDestination(),newDistance,curr));
-			}
-		}
-		return null;
-	}
 	
 	/** Find the path from start to goal using A-Star search
 	 * 
@@ -333,46 +206,13 @@ public class MapGraph {
 			GeographicPoint goal, Consumer<GeographicPoint> nodeSearched)
 	{
 		// TODO: Implement this method in WEEK 3
-		return djikstraHelper(start,goal,false);
+		ShortestPathFinder searcher = new AStarPathFinder(nodeMap,false);
+		return searcher.search(start,goal);
 		// Hook for visualization.  See writeup.
 		//nodeSearched.accept(next.getLocation());
 	}
 	
-	/** A wrapper class around my Node object.
-	 *  This class is used by Djikstra's algorithm as it also contains a cost field,
-	 *  distance as well as the parent Node leading to the current one. The class implements 
-	 *  Combarable in order to facilitate priorityQueye entries.
-	 *  
-	 * @author manos
-	 */
-	private class SearchNode implements Comparable<SearchNode>{
-		public double distance;
-		public Node node;
-		public SearchNode parent;
-		public SearchNode(Node node) {
-			this(node,Double.POSITIVE_INFINITY,null);
-		}
-
-		public SearchNode(Node node,double distance,SearchNode parent) {
-			this.node = node;
-			this.distance = distance;
-			this.parent = parent;
-		}
-		public double estimateDistance(SearchNode other) {
-			GeographicPoint start = reverseMapping(this.node);
-			GeographicPoint goal = reverseMapping(other.node);
-			return start.distance(goal);
-		}
-		@Override
-		public int compareTo(SearchNode other) {
-			// TODO Auto-generated method stub
-			if(this.distance < other.distance) {
-				return -1;
-			}
-			else return 1;
-		}
-	}
-
+	
 	public static void main(String[] args)
 	{
 		System.out.print("Making a new map...");
